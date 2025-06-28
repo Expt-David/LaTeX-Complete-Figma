@@ -1,6 +1,43 @@
-const HtmlWebpackInlineSourcePlugin = require('html-webpack-inline-source-plugin');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const path = require('path');
+
+// Custom plugin to inline JavaScript for Figma plugins
+class HtmlInlineSourcePlugin {
+    apply(compiler) {
+        compiler.hooks.compilation.tap('HtmlInlineSourcePlugin', (compilation) => {
+            const hooks = HtmlWebpackPlugin.getHooks(compilation);
+            
+            hooks.alterAssetTags.tapAsync(
+                'HtmlInlineSourcePlugin',
+                (data, cb) => {
+                    // Find script tags that reference ui.js
+                    data.assetTags.scripts = data.assetTags.scripts.map(tag => {
+                        if (tag.attributes && tag.attributes.src === 'ui.js') {
+                            // Get the JS content from compilation assets
+                            const jsAsset = compilation.getAsset('ui.js');
+                            if (jsAsset) {
+                                const jsContent = jsAsset.source.source();
+                                // Convert to inline script tag
+                                return {
+                                    tagName: 'script',
+                                    innerHTML: jsContent,
+                                    attributes: {}
+                                };
+                            }
+                        }
+                        return tag;
+                    });
+                    cb(null, data);
+                }
+            );
+
+            hooks.afterEmit.tap('HtmlInlineSourcePlugin', () => {
+                // Remove the ui.js file since it's now inlined
+                compilation.deleteAsset('ui.js');
+            });
+        });
+    }
+}
 
 module.exports = (env, argv) => ({
     mode: argv.mode === 'production' ? 'production' : 'development',
@@ -19,10 +56,10 @@ module.exports = (env, argv) => ({
             {test: /\.tsx?$/, use: 'ts-loader', exclude: /node_modules/},
 
             // Enables including CSS by doing "import './file.css'" in your TypeScript code
-            {test: /\.css$/, loader: [{loader: 'style-loader'}, {loader: 'css-loader'}]},
+            { test:/\.css$/, use:['style-loader','css-loader'] },
 
             // Allows you to use "<%= require('./file.svg') %>" in your HTML code to get a data URI
-            {test: /\.(png|jpg|gif|webp|svg)$/, loader: [{loader: 'url-loader'}]},
+            { test:/\.(png|jpe?g|gif|webp|svg)$/, use:['url-loader'] },
         ],
     },
 
@@ -39,10 +76,22 @@ module.exports = (env, argv) => ({
         new HtmlWebpackPlugin({
             template: './src/app/index.html',
             filename: 'ui.html',
-            inlineSource: '.(js)$',
             chunks: ['ui'],
+            inject: 'body',
+            minify: argv.mode === 'production' ? {
+                removeComments: true,
+                collapseWhitespace: true,
+                removeRedundantAttributes: true,
+                useShortDoctype: true,
+                removeEmptyAttributes: true,
+                removeStyleLinkTypeAttributes: true,
+                keepClosingSlash: true,
+                minifyJS: true,
+                minifyCSS: true,
+                minifyURLs: true,
+            } : false,
         }),
-        new HtmlWebpackInlineSourcePlugin(),
+        new HtmlInlineSourcePlugin(),
     ],
     // optimization: {
     //     splitChunks: {
