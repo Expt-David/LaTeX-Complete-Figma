@@ -39,6 +39,10 @@ figma.ui.onmessage = msg => {
 
                 groupNode.appendChild(svg.children[0]);
                 groupNode.children[0].remove();
+
+                // Lock aspect ratio for the updated group
+                (groupNode as any).constrainProportions = true;
+
                 figma.currentPage.selection = [groupNode];
             } else {
                 svg.setPluginData('source', msg.source);
@@ -51,6 +55,9 @@ figma.ui.onmessage = msg => {
                 if (msg.scale !== 1) {
                     svg.resize(svg.width * msg.scale, svg.height * msg.scale);
                 }
+
+                // Lock aspect ratio for the new group
+                (svg as any).constrainProportions = true;
 
                 figma.currentPage.appendChild(svg);
                 figma.currentPage.selection = [svg];
